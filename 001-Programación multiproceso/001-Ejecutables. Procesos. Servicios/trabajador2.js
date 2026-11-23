@@ -5,4 +5,4 @@ onmessage = function(){
   }
   console.log("acabado")
   postMessage("ok volvemos")
-}	
+}
