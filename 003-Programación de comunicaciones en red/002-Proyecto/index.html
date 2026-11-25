@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reto relámpago</title>
+  <style>
+    :root{font-family:system-ui,Arial,sans-serif;color:#f6f3ef;background:#151a22}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at top,#293746,#151a22 65%)}button,input{font:inherit}button{cursor:pointer}.contenedor{width:min(1000px,94%);margin:0 auto;padding:34px 0}.cabecera{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:24px}.marca{color:#f6b84a;font-size:.85rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase}.cabecera h1{margin:4px 0;font-size:clamp(2rem,5vw,3.5rem)}.estado-conexion{color:#b5c3cf;font-size:.9rem}.panel{background:#202a35;border:1px solid #ffffff1c;border-radius:16px;padding:22px;box-shadow:0 12px 35px #0003}.columnas{display:grid;grid-template-columns:minmax(0,1fr) 270px;gap:18px}.pregunta{min-height:360px}.ronda{color:#f6b84a;font-weight:700}.texto-pregunta{font-size:clamp(1.4rem,3vw,2rem);line-height:1.25;margin:20px 0}.opciones{display:grid;grid-template-columns:1fr 1fr;gap:10px}.opcion{min-height:58px;text-align:left;color:#fff;background:#303d4a;border:1px solid #ffffff20;border-radius:10px;padding:12px 14px}.opcion:hover:not(:disabled){background:#3a4d5e}.opcion:disabled{cursor:default;opacity:.75}.opcion.correcta{border-color:#52d69a;background:#176b53}.opcion.incorrecta{border-color:#ff7d78;background:#783d43}.boton-principal{border:0;border-radius:9px;background:#e7a832;color:#241b0c;font-weight:800;padding:12px 18px}.boton-principal:disabled{opacity:.5;cursor:not-allowed}.barra{height:8px;background:#10151b;border-radius:5px;overflow:hidden;margin-top:18px}.barra div{height:100%;width:100%;background:#58c9bd;transform-origin:left;transition:transform .2s linear}.mensaje{min-height:1.5em;color:#c5d0d8}.lateral h2{margin:0 0 16px;font-size:1.15rem}.lista{list-style:none;margin:0;padding:0;display:grid;gap:9px}.lista li{display:flex;justify-content:space-between;gap:14px;padding:10px 11px;background:#17212a;border-radius:8px}.puesto{color:#f6b84a;font-weight:700}.ayuda{color:#b5c3cf;font-size:.9rem;line-height:1.5;margin-top:18px}.login{position:fixed;inset:0;z-index:5;background:#0d1219dc;display:grid;place-items:center;padding:18px}.login.oculto{display:none}.login form{width:min(390px,100%);background:#202a35;padding:28px;border-radius:16px;border:1px solid #ffffff27}.login h2{margin-top:0}.login input{width:100%;padding:12px;margin:8px 0 15px;border:1px solid #ffffff35;border-radius:8px;background:#151a22;color:#fff}.login label{font-size:.9rem}.pie{color:#91a1ad;font-size:.84rem;margin:18px 2px}@media(max-width:760px){.columnas{grid-template-columns:1fr}.pregunta{min-height:320px}.cabecera{align-items:flex-start;flex-direction:column}.opciones{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div id="login" class="login">
+    <form id="formulario">
+      <p class="marca">0490 · Servicios y procesos</p>
+      <h2>Reto relámpago</h2>
+      <p>Entra con un nombre y compite respondiendo las mismas preguntas que el resto.</p>
+      <label for="nombre">Nombre visible</label>
+      <input id="nombre" maxlength="20" autocomplete="nickname" required>
+      <button class="boton-principal" type="submit">Entrar al juego</button>
+    </form>
+  </div>
+
+  <main class="contenedor">
+    <header class="cabecera">
+      <div><p class="marca">Juego de preguntas por WebSocket</p><h1>Reto relámpago</h1></div>
+      <span id="conexion" class="estado-conexion">● Desconectado</span>
+    </header>
+    <div class="columnas">
+      <section class="panel pregunta">
+        <p id="ronda" class="ronda">Sala de espera</p>
+        <h2 id="texto-pregunta" class="texto-pregunta">Conecta a otros jugadores y empieza una partida.</h2>
+        <div id="opciones" class="opciones"></div>
+        <div class="barra"><div id="tiempo"></div></div>
+        <p id="mensaje" class="mensaje" role="status">Comparte esta dirección con tus compañeros de red.</p>
+        <button id="iniciar" class="boton-principal" disabled>Empezar partida</button>
+      </section>
+      <aside class="panel lateral">
+        <h2>Clasificación</h2>
+        <ol id="clasificacion" class="lista"></ol>
+        <p class="ayuda">Cada acierto suma un punto. Solo cuenta la primera respuesta de cada jugador en cada ronda.</p>
+      </aside>
+    </div>
+    <p class="pie">Cinco rondas · 15 segundos por pregunta · El servidor sincroniza respuestas y puntuación.</p>
+  </main>
+  <script>
+    'use strict';
+    const trabajador = new Worker('./worker.js');
+    const login = document.querySelector('#login');
+    const formulario = document.querySelector('#formulario');
+    const nombre = document.querySelector('#nombre');
+    const conexion = document.querySelector('#conexion');
+    const textoPregunta = document.querySelector('#texto-pregunta');
+    const opciones = document.querySelector('#opciones');
+    const mensaje = document.querySelector('#mensaje');
+    const botonIniciar = document.querySelector('#iniciar');
+    const barraTiempo = document.querySelector('#tiempo');
+    let conectado = false;
+    let respondido = false;
+    let reloj = null;
+    let miId = null;
+
+    function mostrarJugadores(jugadores) {
+      const lista = document.querySelector('#clasificacion');
+      lista.replaceChildren();
+      jugadores.forEach((jugador, indice) => {
+        const fila = document.createElement('li');
+        const nombreJugador = document.createElement('span');
+        const puntos = document.createElement('strong');
+        nombreJugador.textContent = `${indice + 1}. ${jugador.nombre}`;
+        puntos.textContent = `${jugador.puntos} pts`;
+        fila.append(nombreJugador, puntos);
+        lista.append(fila);
+      });
+      if (jugadores.length === 0) lista.textContent = 'Aún no hay jugadores.';
+      botonIniciar.disabled = !conectado || jugadores.length === 0;
+    }
+
+    function mostrarPregunta(datos) {
+      respondido = false;
+      document.querySelector('#ronda').textContent = `Ronda ${datos.numero_ronda} de ${datos.total_rondas}`;
+      textoPregunta.textContent = datos.texto;
+      opciones.replaceChildren();
+      datos.opciones.forEach((texto, indice) => {
+        const boton = document.createElement('button');
+        boton.className = 'opcion';
+        boton.textContent = `${String.fromCharCode(65 + indice)} · ${texto}`;
+        boton.onclick = function () {
+          if (respondido) return;
+          respondido = true;
+          trabajador.postMessage({ tipo: 'enviar', mensaje: { tipo: 'respuesta', opcion: indice } });
+          Array.from(opciones.children).forEach(opcion => opcion.disabled = true);
+          mensaje.textContent = 'Respuesta enviada. Espera a que termine la ronda.';
+        };
+        opciones.append(boton);
+      });
+      botonIniciar.disabled = true;
+      mensaje.textContent = 'Elige una respuesta antes de que acabe el tiempo.';
+      iniciarReloj(datos.segundos);
+    }
+
+    function iniciarReloj(segundos) {
+      clearInterval(reloj);
+      const inicio = Date.now();
+      barraTiempo.style.transform = 'scaleX(1)';
+      reloj = setInterval(() => {
+        const restante = Math.max(0, segundos - (Date.now() - inicio) / 1000);
+        barraTiempo.style.transform = `scaleX(${restante / segundos})`;
+        if (restante <= 0) clearInterval(reloj);
+      }, 100);
+    }
+
+    function mostrarEstado(datos) {
+      mostrarJugadores(datos.jugadores || []);
+      if (datos.activa) mostrarPregunta(datos);
+      else {
+        botonIniciar.disabled = !conectado || !(datos.jugadores || []).length;
+        document.querySelector('#ronda').textContent = 'Sala de espera';
+        textoPregunta.textContent = 'Conecta a otros jugadores y empieza una partida.';
+      }
+    }
+
+    formulario.onsubmit = function (evento) {
+      evento.preventDefault();
+      const nombreLimpio = nombre.value.trim();
+      if (!nombreLimpio) return;
+      const protocolo = location.protocol === 'https:' ? 'wss' : 'ws';
+      trabajador.postMessage({ tipo: 'conectar', nombre: nombreLimpio, url: `${protocolo}://${location.hostname || 'localhost'}:8765` });
+      mensaje.textContent = 'Conectando con el servidor…';
+    };
+
+    botonIniciar.onclick = function () {
+      trabajador.postMessage({ tipo: 'enviar', mensaje: { tipo: 'iniciar' } });
+      botonIniciar.disabled = true;
+      mensaje.textContent = 'Preparando la partida…';
+    };
+
+    trabajador.onmessage = function (evento) {
+      const datos = evento.data;
+      if (datos.tipo === 'conexion') {
+        conectado = datos.conectada;
+        conexion.textContent = conectado ? '● Conectado' : '● Desconectado · reconectando';
+        if (!conectado) conexion.style.color = '#ff9a91';
+        else conexion.style.color = '#81dfae';
+        botonIniciar.disabled = !conectado;
+        return;
+      }
+      if (datos.tipo !== 'mensaje') return;
+      const m = datos.mensaje;
+      if (m.tipo === 'bienvenida') {
+        miId = m.id;
+        login.classList.add('oculto');
+        mensaje.textContent = `Has entrado como ${nombre.value.trim()}.`;
+        mostrarEstado(m);
+      } else if (m.tipo === 'estado') {
+        mostrarEstado(m);
+      } else if (m.tipo === 'jugadores') {
+        mostrarJugadores(m.jugadores);
+      } else if (m.tipo === 'pregunta') {
+        mostrarPregunta(m);
+      } else if (m.tipo === 'confirmacion') {
+        mensaje.textContent = 'Respuesta recibida por el servidor.';
+      } else if (m.tipo === 'resultado') {
+        clearInterval(reloj);
+        Array.from(opciones.children).forEach((boton, indice) => {
+          boton.disabled = true;
+          if (indice === m.correcta) boton.classList.add('correcta');
+          else if (indice === m.respuestas.find(r => r.id === miId)?.opcion) boton.classList.add('incorrecta');
+        });
+        mensaje.textContent = `La respuesta correcta era ${String.fromCharCode(65 + m.correcta)}. Siguiente ronda en unos segundos.`;
+        mostrarJugadores(m.jugadores);
+      } else if (m.tipo === 'final') {
+        document.querySelector('#ronda').textContent = 'Partida terminada';
+        textoPregunta.textContent = m.jugadores.length ? `¡Enhorabuena, ${m.jugadores[0].nombre}!` : 'No hay puntuaciones.';
+        opciones.replaceChildren();
+        mensaje.textContent = 'La clasificación final está a la derecha. Puedes iniciar otra partida.';
+        mostrarJugadores(m.jugadores);
+        botonIniciar.disabled = !conectado;
+        botonIniciar.textContent = 'Jugar otra vez';
+      } else if (m.tipo === 'error') {
+        mensaje.textContent = m.texto;
+      }
+    };
+  </script>
+</body>
+</html>

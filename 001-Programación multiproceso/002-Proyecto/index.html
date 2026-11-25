@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Laboratorio de imagen multiproceso</title>
+  <link rel="stylesheet" href="estilos.css">
+</head>
+<body>
+  <main class="contenedor">
+    <header>
+      <p class="sobrelinea">0490 · Programación de servicios y procesos</p>
+      <h1>Laboratorio de imagen multiproceso</h1>
+      <p>Procesa los píxeles de una imagen con varios Web Workers y observa cómo se reparte el trabajo.</p>
+    </header>
+
+    <section class="panel controles">
+      <label class="selector-archivo" for="archivo">Selecciona una imagen</label>
+      <input id="archivo" type="file" accept="image/*">
+      <div class="fila-controles">
+        <label>Filtro
+          <select id="filtro">
+            <option value="grises">Escala de grises</option>
+            <option value="invertir">Invertir colores</option>
+            <option value="sepia">Sepia</option>
+          </select>
+        </label>
+        <label>Trabajadores
+          <select id="numero-trabajadores"></select>
+        </label>
+        <button id="procesar" disabled>Procesar imagen</button>
+      </div>
+      <progress id="progreso" value="0" max="100"></progress>
+      <p id="estado" role="status">Carga una imagen para empezar.</p>
+    </section>
+
+    <section class="resultados">
+      <article class="panel">
+        <h2>Imagen original</h2>
+        <canvas id="original"></canvas>
+      </article>
+      <article class="panel">
+        <h2>Imagen procesada</h2>
+        <canvas id="resultado"></canvas>
+      </article>
+    </section>
+
+    <section class="panel estadisticas">
+      <h2>Resultado del proceso</h2>
+      <div class="datos">
+        <p>Píxeles: <strong id="pixeles">—</strong></p>
+        <p>Tiempo: <strong id="tiempo">—</strong></p>
+        <p>Trabajadores: <strong id="trabajadores-usados">—</strong></p>
+        <p>Brillo medio: <strong id="brillo">—</strong></p>
+      </div>
+      <p class="nota">Cada trabajador recibe un rango de filas. Devuelve sus píxeles y estadísticas al proceso principal, que reúne los bloques en su posición y actualiza el canvas.</p>
+    </section>
+    <footer>El navegador debe permitir Web Workers. Abre esta página desde un servidor local si el navegador bloquea los trabajadores al abrir el archivo directamente.</footer>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
